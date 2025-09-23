@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  # Test MongoDB
+  mongo-test:
+    image: mongo:6.0
+    container_name: jenkins-mongo-test
+    environment:
+      MONGO_INITDB_DATABASE: jenkins_mern_test_db
+    networks:
+      - test-network
+
+  # Server for testing
+  server-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: jenkins-server-test
+    environment:
+      NODE_ENV: test
+      MONGODB_URI: mongodb://mongo-test:27017/jenkins_mern_test_db
+      PORT: 5000
+    depends_on:
+      - mongo-test
+    networks:
+      - test-network
+    command: npm run test:ci
+
+  # Client tests
+  client-test:
+    build:
+      context: ./client
+      dockerfile: ../docker/Dockerfile.client
+      target: build
+    container_name: jenkins-client-test
+    command: npm run test:ci
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

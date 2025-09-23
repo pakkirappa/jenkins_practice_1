@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "jenkins-mern-api"
+    static_configs:
+      - targets: ["server:5000"]
+    metrics_path: "/api/metrics"
+    scrape_interval: 30s
+
+  - job_name: "jenkins-mern-client"
+    static_configs:
+      - targets: ["client:80"]
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+
+  - job_name: "mongodb"
+    static_configs:
+      - targets: ["mongo:27017"]
+    scrape_interval: 30s
+
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
