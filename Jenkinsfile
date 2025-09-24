@@ -216,9 +216,9 @@ pipeline {
                     branch 'develop'
                 }
             }
-            agent any
             parallel {
                 stage('Build Client Image') {
+                    agent any
                     steps {
                         script {
                             echo "🐳 Building Docker image for client..."
@@ -231,6 +231,7 @@ pipeline {
                     }
                 }
                 stage('Build Server Image') {
+                    agent any
                     steps {
                         script {
                             echo "🐳 Building Docker image for server..."
