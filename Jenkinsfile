@@ -1,111 +1,22 @@
+// Alternative Jenkinsfile using Docker agents - no Node.js installation required
 pipeline {
-    agent         stage('Setup Environment') {
-            steps {
-                script {
-                    echo "🔍 Setting up build environment..."
-                    
-                    // Check Git first (should always be available)
-                    sh 'echo "Git version: $(git --version)"'
-                    
-                    // Check if Node.js is available
-                    def nodeAvailable = sh(
-                        script: 'command -v node >/dev/null 2>&1', 
-                        returnStatus: true
-                    ) == 0
-                    
-                    if (nodeAvailable) {
-                        echo "✅ Node.js is already available"
-                        sh '''
-                            echo "Node.js version: $(node --version)"
-                            echo "npm version: $(npm --version)"
-                        '''
-                    } else {
-                        echo "📦 Node.js not found, attempting installation..."
-                        
-                        // Try to install Node.js using common methods
-                        sh '''
-                            # Try different installation methods
-                            if command -v apt-get >/dev/null 2>&1; then
-                                echo "Installing Node.js on Ubuntu/Debian..."
-                                curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-                                sudo apt-get install -y nodejs
-                            elif command -v yum >/dev/null 2>&1; then
-                                echo "Installing Node.js on CentOS/RHEL..."
-                                curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
-                                sudo yum install -y nodejs
-                            elif command -v brew >/dev/null 2>&1; then
-                                echo "Installing Node.js on macOS..."
-                                brew install node@18
-                            else
-                                echo "⚠️ Cannot auto-install Node.js. Please install manually or use Docker agent."
-                                echo "Trying to download and install manually..."
-                                
-                                # Download and install Node.js manually
-                                wget https://nodejs.org/dist/v18.17.0/node-v18.17.0-linux-x64.tar.xz
-                                tar -xJf node-v18.17.0-linux-x64.tar.xz
-                                sudo cp -r node-v18.17.0-linux-x64/* /usr/local/
-                                rm -rf node-v18.17.0-linux-x64*
-                            fi
-                        '''
-                        
-                        // Verify installation after attempting to install
-                        sh '''
-                            if command -v node >/dev/null 2>&1; then
-                                echo "✅ Node.js installation successful"
-                                echo "Node.js version: $(node --version)"
-                                echo "npm version: $(npm --version)"
-                            else
-                                echo "❌ Node.js installation failed"
-                                exit 1
-                            fi
-                        '''
-                    }
-                    
-                    // Set npm cache to workspace to avoid permission issues
-                    sh 'npm config set cache ${WORKSPACE}/.npm-cache'
-                    
-                    // Check Docker (optional for some stages)
-                    sh 'echo "Docker version: $(docker --version 2>/dev/null || echo \'Docker not available\')"'
-                    
-                    echo "✅ Environment setup completed"
-                }
-            }
-        }move tools section for now - we'll handle Node.js installation manually
-    // Uncomment this when NodeJS plugin is properly configured:
-    // tools {
-    //     nodejs 'NodeJS-18'
-    // }
+    agent none // We'll specify agents per stage
     
     environment {
-        // Define environment variables
-        NODE_VERSION = '18'
         MONGODB_URI = 'mongodb://mongo:27017/jenkins_mern_db'
-        // Note: BUILD_NUMBER and GIT_COMMIT are automatically available as env.BUILD_NUMBER and env.GIT_COMMIT
         DOCKER_REGISTRY = 'jenkins-mern'
         APP_NAME = 'jenkins-mern-app'
-        // Set npm cache to workspace to avoid permission issues
-        NPM_CONFIG_CACHE = "${WORKSPACE}/.npm-cache"
-        PATH = "${env.PATH}:/usr/local/bin"
     }
     
     stages {
-        stage('Verify Environment') {
+        stage('Checkout & Environment Check') {
+            agent any
             steps {
                 script {
-                    echo "� Verifying build environment..."
-                    
-                    // Check if required tools are available
-                    sh '''
-                        echo "Git version: $(git --version)"
-                        echo "Node.js version: $(node --version)"
-                        echo "npm version: $(npm --version)"
-                        echo "Docker version: $(docker --version || echo 'Docker not available')"
-                    '''
-                    
-                    // Set npm cache to workspace to avoid permission issues
-                    sh 'npm config set cache ${WORKSPACE}/.npm-cache'
-                    
-                    echo "✅ Environment verification completed"
+                    echo "🔄 Checking out code and verifying Docker..."
+                    sh 'git --version'
+                    sh 'docker --version'
+                    echo "✅ Basic environment ready"
                 }
             }
         }
@@ -113,9 +24,15 @@ pipeline {
         stage('Install Dependencies') {
             parallel {
                 stage('Install Client Dependencies') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
-                            echo '📦 Installing React client dependencies...'
+                            echo "📦 Installing React client dependencies..."
                             dir('client') {
                                 sh 'npm ci'
                             }
@@ -123,6 +40,12 @@ pipeline {
                     }
                 }
                 stage('Install Server Dependencies') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "📦 Installing Node.js server dependencies..."
@@ -138,6 +61,12 @@ pipeline {
         stage('Lint and Code Quality') {
             parallel {
                 stage('Lint Client') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🔍 Running ESLint on React client..."
@@ -155,6 +84,12 @@ pipeline {
                     }
                 }
                 stage('Security Audit') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🛡️ Running security audit..."
@@ -173,6 +108,12 @@ pipeline {
         stage('Build') {
             parallel {
                 stage('Build Client') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🏗️ Building React application..."
@@ -189,6 +130,12 @@ pipeline {
                     }
                 }
                 stage('Prepare Server') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🔧 Preparing server for deployment..."
@@ -204,6 +151,12 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Test Client') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🧪 Running React tests..."
@@ -226,6 +179,12 @@ pipeline {
                     }
                 }
                 stage('Test Server') {
+                    agent {
+                        docker {
+                            image 'node:18-alpine'
+                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                        }
+                    }
                     steps {
                         script {
                             echo "🧪 Running Node.js tests..."
@@ -236,7 +195,14 @@ pipeline {
                     }
                     post {
                         always {
-                            publishTestResults testResultsPattern: 'server/coverage/lcov.info'
+                            publishHTML([
+                                allowMissing: false,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'server/coverage',
+                                reportFiles: 'index.html',
+                                reportName: 'Server Test Coverage'
+                            ])
                         }
                     }
                 }
@@ -250,6 +216,7 @@ pipeline {
                     branch 'develop'
                 }
             }
+            agent any
             parallel {
                 stage('Build Client Image') {
                     steps {
@@ -285,6 +252,7 @@ pipeline {
                     branch 'develop'
                 }
             }
+            agent any
             steps {
                 script {
                     echo "🔗 Running integration tests..."
@@ -302,6 +270,7 @@ pipeline {
             when {
                 branch 'develop'
             }
+            agent any
             steps {
                 script {
                     echo "🚀 Deploying to staging environment..."
@@ -320,6 +289,7 @@ pipeline {
             when {
                 branch 'main'
             }
+            agent any
             steps {
                 script {
                     echo "🌟 Deploying to production environment..."
@@ -347,6 +317,7 @@ pipeline {
                     branch 'develop'
                 }
             }
+            agent any
             steps {
                 script {
                     echo "🏥 Running post-deployment health checks..."
@@ -385,17 +356,36 @@ pipeline {
     
     post {
         always {
-            echo "🧹 Cleaning up workspace..."
-            cleanWs()
+            node('') {
+                echo "🧹 Cleaning up workspace..."
+                cleanWs()
+            }
         }
         success {
-            echo "✅ Pipeline completed successfully!"
-            script {
-                if (env.BRANCH_NAME == 'main') {
+            node('') {
+                echo "✅ Pipeline completed successfully!"
+                script {
+                    if (env.BRANCH_NAME == 'main') {
+                        try {
+                            slackSend(
+                                color: 'good',
+                                message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
+                            )
+                        } catch (Exception e) {
+                            echo "⚠️ Slack notification failed: ${e.getMessage()}"
+                        }
+                    }
+                }
+            }
+        }
+        failure {
+            node('') {
+                echo "❌ Pipeline failed!"
+                script {
                     try {
                         slackSend(
-                            color: 'good',
-                            message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
+                            color: 'danger',
+                            message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
                         )
                     } catch (Exception e) {
                         echo "⚠️ Slack notification failed: ${e.getMessage()}"
@@ -403,21 +393,10 @@ pipeline {
                 }
             }
         }
-        failure {
-            echo "❌ Pipeline failed!"
-            script {
-                try {
-                    slackSend(
-                        color: 'danger',
-                        message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
-                    )
-                } catch (Exception e) {
-                    echo "⚠️ Slack notification failed: ${e.getMessage()}"
-                }
-            }
-        }
         unstable {
-            echo "⚠️ Pipeline unstable - some tests may have failed"
+            node('') {
+                echo "⚠️ Pipeline unstable - some tests may have failed"
+            }
         }
     }
 }
