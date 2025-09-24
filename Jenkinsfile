@@ -5,8 +5,9 @@ pipeline {
         // Define environment variables
         NODE_VERSION = '18'
         MONGODB_URI = 'mongodb://mongo:27017/jenkins_mern_db'
-        BUILD_NUMBER = "${env.BUILD_NUMBER}"
-        GIT_COMMIT = "${env.GIT_COMMIT}"
+        // Note: BUILD_NUMBER and GIT_COMMIT are automatically available as env.BUILD_NUMBER and env.GIT_COMMIT
+        DOCKER_REGISTRY = 'jenkins-mern'
+        APP_NAME = 'jenkins-mern-app'
     }
     
     stages {
@@ -27,7 +28,7 @@ pipeline {
                 stage('Install Client Dependencies') {
                     steps {
                         script {
-                            echo "📦 Installing React client dependencies..."
+                            echo '📦 Installing React client dependencies...'
                             dir('client') {
                                 sh 'npm ci'
                             }
@@ -54,7 +55,14 @@ pipeline {
                         script {
                             echo "🔍 Running ESLint on React client..."
                             dir('client') {
-                                sh 'npm run lint || echo "Linting completed with warnings"'
+                                sh '''
+                                    if npm run lint; then
+                                        echo "✅ Linting passed"
+                                    else
+                                        echo "⚠️ Linting completed with warnings or errors"
+                                        exit 0
+                                    fi
+                                '''
                             }
                         }
                     }
@@ -119,7 +127,14 @@ pipeline {
                     }
                     post {
                         always {
-                            publishTestResults testResultsPattern: 'client/coverage/lcov.info'
+                            publishHTML([
+                                allowMissing: false,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'client/coverage',
+                                reportFiles: 'index.html',
+                                reportName: 'Client Test Coverage'
+                            ])
                         }
                     }
                 }
@@ -153,8 +168,11 @@ pipeline {
                     steps {
                         script {
                             echo "🐳 Building Docker image for client..."
-                            sh 'docker build -t jenkins-mern-client:${BUILD_NUMBER} -f docker/Dockerfile.client .'
-                            sh 'docker tag jenkins-mern-client:${BUILD_NUMBER} jenkins-mern-client:latest'
+                            sh """
+                                docker build -t ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} -f docker/Dockerfile.client .
+                                docker tag ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-client:latest
+                                echo "✅ Client Docker image built: ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER}"
+                            """
                         }
                     }
                 }
@@ -162,8 +180,11 @@ pipeline {
                     steps {
                         script {
                             echo "🐳 Building Docker image for server..."
-                            sh 'docker build -t jenkins-mern-server:${BUILD_NUMBER} -f docker/Dockerfile.server .'
-                            sh 'docker tag jenkins-mern-server:${BUILD_NUMBER} jenkins-mern-server:latest'
+                            sh """
+                                docker build -t ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} -f docker/Dockerfile.server .
+                                docker tag ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-server:latest
+                                echo "✅ Server Docker image built: ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER}"
+                            """
                         }
                     }
                 }
@@ -197,7 +218,13 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Deploying to staging environment..."
-                    sh 'docker-compose -f docker-compose.staging.yml up -d'
+                    sh """
+                        export BUILD_NUMBER=${env.BUILD_NUMBER}
+                        export GIT_COMMIT=${env.GIT_COMMIT}
+                        docker-compose -f docker-compose.staging.yml down || true
+                        docker-compose -f docker-compose.staging.yml up -d
+                        echo "✅ Staging deployment completed"
+                    """
                 }
             }
         }
@@ -209,21 +236,61 @@ pipeline {
             steps {
                 script {
                     echo "🌟 Deploying to production environment..."
-                    input message: 'Deploy to production?', ok: 'Deploy'
-                    sh 'docker-compose -f docker-compose.prod.yml up -d'
+                    timeout(time: 5, unit: 'MINUTES') {
+                        input message: 'Deploy to production?', ok: 'Deploy',
+                              submitterParameter: 'DEPLOYER'
+                    }
+                    echo "Deployment approved by: ${env.DEPLOYER}"
+                    sh """
+                        export BUILD_NUMBER=${env.BUILD_NUMBER}
+                        export GIT_COMMIT=${env.GIT_COMMIT}
+                        docker-compose -f docker-compose.prod.yml up -d --no-deps server
+                        sleep 10
+                        docker-compose -f docker-compose.prod.yml up -d --no-deps client
+                        echo "✅ Production deployment completed"
+                    """
                 }
             }
         }
         
         stage('Health Check') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                }
+            }
             steps {
                 script {
                     echo "🏥 Running post-deployment health checks..."
-                    sleep(10) // Wait for services to start
-                    sh '''
-                        # Check if the API is responding
-                        curl -f http://localhost:5000/api/health || echo "Health check failed"
-                    '''
+                    sleep(20) // Wait for services to start
+                    
+                    // Determine the correct port based on environment
+                    def healthUrl = ""
+                    if (env.BRANCH_NAME == 'develop') {
+                        healthUrl = "http://localhost:5001/api/health"
+                    } else if (env.BRANCH_NAME == 'main') {
+                        healthUrl = "http://localhost/api/health"
+                    } else {
+                        healthUrl = "http://localhost:5000/api/health"
+                    }
+                    
+                    sh """
+                        echo "Checking health at: ${healthUrl}"
+                        for i in {1..5}; do
+                            if curl -f ${healthUrl}; then
+                                echo "✅ Health check passed on attempt \$i"
+                                break
+                            else
+                                echo "⏳ Health check failed, attempt \$i/5, waiting..."
+                                sleep 10
+                                if [ \$i -eq 5 ]; then
+                                    echo "❌ Health check failed after 5 attempts"
+                                    exit 1
+                                fi
+                            fi
+                        done
+                    """
                 }
             }
         }
@@ -238,20 +305,28 @@ pipeline {
             echo "✅ Pipeline completed successfully!"
             script {
                 if (env.BRANCH_NAME == 'main') {
-                    slackSend(
-                        color: 'good',
-                        message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
-                    )
+                    try {
+                        slackSend(
+                            color: 'good',
+                            message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
+                        )
+                    } catch (Exception e) {
+                        echo "⚠️ Slack notification failed: ${e.getMessage()}"
+                    }
                 }
             }
         }
         failure {
             echo "❌ Pipeline failed!"
             script {
-                slackSend(
-                    color: 'danger',
-                    message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
-                )
+                try {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Slack notification failed: ${e.getMessage()}"
+                }
             }
         }
         unstable {
