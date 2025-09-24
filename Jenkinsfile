@@ -1,6 +1,11 @@
 pipeline {
     agent any
     
+    tools {
+        // This is the recommended way - requires NodeJS plugin to be installed in Jenkins
+        nodejs 'NodeJS-18' // This name should match your Jenkins tool configuration
+    }
+    
     environment {
         // Define environment variables
         NODE_VERSION = '18'
@@ -8,17 +13,28 @@ pipeline {
         // Note: BUILD_NUMBER and GIT_COMMIT are automatically available as env.BUILD_NUMBER and env.GIT_COMMIT
         DOCKER_REGISTRY = 'jenkins-mern'
         APP_NAME = 'jenkins-mern-app'
+        // Set npm cache to workspace to avoid permission issues
+        NPM_CONFIG_CACHE = "${WORKSPACE}/.npm-cache"
     }
     
     stages {
-        stage('Checkout') {
+        stage('Verify Environment') {
             steps {
                 script {
-                    echo "🔄 Checking out code from Git repository..."
-                    // Git checkout is handled automatically by Jenkins
-                    sh 'git --version'
-                    sh 'node --version'
-                    sh 'npm --version'
+                    echo "� Verifying build environment..."
+                    
+                    // Check if required tools are available
+                    sh '''
+                        echo "Git version: $(git --version)"
+                        echo "Node.js version: $(node --version)"
+                        echo "npm version: $(npm --version)"
+                        echo "Docker version: $(docker --version || echo 'Docker not available')"
+                    '''
+                    
+                    // Set npm cache to workspace to avoid permission issues
+                    sh 'npm config set cache ${WORKSPACE}/.npm-cache'
+                    
+                    echo "✅ Environment verification completed"
                 }
             }
         }
