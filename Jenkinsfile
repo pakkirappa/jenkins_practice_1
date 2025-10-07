@@ -57,7 +57,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -73,7 +73,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -94,7 +94,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -117,7 +117,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -141,7 +141,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -163,7 +163,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -184,7 +184,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
@@ -212,7 +212,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args "-v ${WORKSPACE}:/workspace -w /workspace"
+                            reuseNode true
                         }
                     }
                     steps {
