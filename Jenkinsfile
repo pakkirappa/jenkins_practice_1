@@ -1,12 +1,13 @@
-// MERN Stack Jenkins Pipeline with Docker Agents
+// MERN Stack Jenkins Pipeline - No Docker Required
 // 
-// REQUIREMENTS:
-// 1. Jenkins with Docker plugin installed
-// 2. Docker daemon accessible to Jenkins (for Docker agents)
-// 3. Note: Docker CLI on Jenkins agent is optional - Docker agents handle Node.js tasks
+// This version works without Docker and uses the host agent's Node.js
+// If Node.js is not installed, it will attempt to install it automatically on Linux
+// For Windows, Node.js must be pre-installed
 //
-// This pipeline uses Docker agents for Node.js tasks (install, build, test)
-// and gracefully handles cases where Docker CLI isn't available on the main agent
+// REQUIREMENTS:
+// - Jenkins with standard plugins
+// - Node.js 18+ (will auto-install on Linux if missing)
+// - Git (usually available by default)
 
 pipeline {
     agent none // We'll specify agents per stage
@@ -54,33 +55,68 @@ pipeline {
         stage('Install Dependencies') {
             parallel {
                 stage('Install Client Dependencies') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "📦 Installing React client dependencies..."
+                            
+                            // Ensure Node.js is available
+                            if (isUnix()) {
+                                sh '''
+                                    # Check if Node.js is available, install if not
+                                    if ! command -v node >/dev/null 2>&1; then
+                                        echo "Installing Node.js..."
+                                        # Try different installation methods
+                                        if command -v apt-get >/dev/null 2>&1; then
+                                            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+                                            sudo apt-get install -y nodejs
+                                        elif command -v yum >/dev/null 2>&1; then
+                                            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+                                            sudo yum install -y nodejs
+                                        else
+                                            echo "Please install Node.js manually"
+                                            exit 1
+                                        fi
+                                    fi
+                                    echo "Node.js version: $(node --version)"
+                                    echo "npm version: $(npm --version)"
+                                '''
+                            } else {
+                                bat '''
+                                    where node >nul 2>&1 || (
+                                        echo "Node.js not found. Please install Node.js 18+ manually."
+                                        echo "Download from: https://nodejs.org/"
+                                        exit /b 1
+                                    )
+                                    echo "Node.js version:"
+                                    node --version
+                                    echo "npm version:"
+                                    npm --version
+                                '''
+                            }
+                            
                             dir('client') {
-                                sh 'npm ci'
+                                if (isUnix()) {
+                                    sh 'npm ci'
+                                } else {
+                                    bat 'npm ci'
+                                }
                             }
                         }
                     }
                 }
                 stage('Install Server Dependencies') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "📦 Installing Node.js server dependencies..."
+                            
                             dir('server') {
-                                sh 'npm ci'
+                                if (isUnix()) {
+                                    sh 'npm ci'
+                                } else {
+                                    bat 'npm ci'
+                                }
                             }
                         }
                     }
@@ -91,43 +127,51 @@ pipeline {
         stage('Lint and Code Quality') {
             parallel {
                 stage('Lint Client') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🔍 Running ESLint on React client..."
                             dir('client') {
-                                sh '''
-                                    if npm run lint; then
-                                        echo "✅ Linting passed"
-                                    else
-                                        echo "⚠️ Linting completed with warnings or errors"
-                                        exit 0
-                                    fi
-                                '''
+                                if (isUnix()) {
+                                    sh '''
+                                        if npm run lint; then
+                                            echo "✅ Linting passed"
+                                        else
+                                            echo "⚠️ Linting completed with warnings or errors"
+                                            exit 0
+                                        fi
+                                    '''
+                                } else {
+                                    bat '''
+                                        npm run lint && (
+                                            echo "✅ Linting passed"
+                                        ) || (
+                                            echo "⚠️ Linting completed with warnings or errors"
+                                        )
+                                    '''
+                                }
                             }
                         }
                     }
                 }
                 stage('Security Audit') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🛡️ Running security audit..."
                             dir('client') {
-                                sh 'npm audit --audit-level=high || echo "Security audit completed"'
+                                if (isUnix()) {
+                                    sh 'npm audit --audit-level=high || echo "Security audit completed"'
+                                } else {
+                                    bat 'npm audit --audit-level=high || echo "Security audit completed"'
+                                }
                             }
                             dir('server') {
-                                sh 'npm audit --audit-level=high || echo "Security audit completed"'
+                                if (isUnix()) {
+                                    sh 'npm audit --audit-level=high || echo "Security audit completed"'
+                                } else {
+                                    bat 'npm audit --audit-level=high || echo "Security audit completed"'
+                                }
                             }
                         }
                     }
@@ -138,17 +182,16 @@ pipeline {
         stage('Build') {
             parallel {
                 stage('Build Client') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🏗️ Building React application..."
                             dir('client') {
-                                sh 'npm run build'
+                                if (isUnix()) {
+                                    sh 'npm run build'
+                                } else {
+                                    bat 'npm run build'
+                                }
                             }
                         }
                     }
@@ -160,17 +203,16 @@ pipeline {
                     }
                 }
                 stage('Prepare Server') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🔧 Preparing server for deployment..."
                             dir('server') {
-                                sh 'echo "Server preparation completed"'
+                                if (isUnix()) {
+                                    sh 'echo "Server preparation completed"'
+                                } else {
+                                    bat 'echo "Server preparation completed"'
+                                }
                             }
                         }
                     }
@@ -181,17 +223,16 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Test Client') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🧪 Running React tests..."
                             dir('client') {
-                                sh 'npm run test:ci'
+                                if (isUnix()) {
+                                    sh 'npm run test:ci'
+                                } else {
+                                    bat 'npm run test:ci'
+                                }
                             }
                         }
                     }
@@ -209,17 +250,16 @@ pipeline {
                     }
                 }
                 stage('Test Server') {
-                    agent {
-                        docker {
-                            image 'node:18-alpine'
-                            reuseNode true
-                        }
-                    }
+                    agent any
                     steps {
                         script {
                             echo "🧪 Running Node.js tests..."
                             dir('server') {
-                                sh 'npm run test:ci'
+                                if (isUnix()) {
+                                    sh 'npm run test:ci'
+                                } else {
+                                    bat 'npm run test:ci'
+                                }
                             }
                         }
                     }
