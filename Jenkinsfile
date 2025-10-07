@@ -35,7 +35,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -51,7 +51,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -72,7 +72,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -95,7 +95,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -119,7 +119,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -141,7 +141,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -162,7 +162,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -190,7 +190,7 @@ pipeline {
                     agent {
                         docker {
                             image 'node:18-alpine'
-                            args '-v ${WORKSPACE}:/workspace -w /workspace'
+                            args "-v ${WORKSPACE}:/workspace -w /workspace"
                         }
                     }
                     steps {
@@ -301,7 +301,6 @@ pipeline {
                         }
                     }
                 }
-            }
             }
         }
         
@@ -438,36 +437,17 @@ pipeline {
     
     post {
         always {
-            node('') {
-                echo "🧹 Cleaning up workspace..."
-                cleanWs()
-            }
+            echo "🧹 Cleaning up workspace..."
+            cleanWs()
         }
         success {
-            node('') {
-                echo "✅ Pipeline completed successfully!"
-                script {
-                    if (env.BRANCH_NAME == 'main') {
-                        try {
-                            slackSend(
-                                color: 'good',
-                                message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
-                            )
-                        } catch (Exception e) {
-                            echo "⚠️ Slack notification failed: ${e.getMessage()}"
-                        }
-                    }
-                }
-            }
-        }
-        failure {
-            node('') {
-                echo "❌ Pipeline failed!"
-                script {
+            echo "✅ Pipeline completed successfully!"
+            script {
+                if (env.BRANCH_NAME == 'main') {
                     try {
                         slackSend(
-                            color: 'danger',
-                            message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
+                            color: 'good',
+                            message: "✅ Production deployment successful! Build #${env.BUILD_NUMBER}"
                         )
                     } catch (Exception e) {
                         echo "⚠️ Slack notification failed: ${e.getMessage()}"
@@ -475,10 +455,26 @@ pipeline {
                 }
             }
         }
-        unstable {
-            node('') {
-                echo "⚠️ Pipeline unstable - some tests may have failed"
+        failure {
+            echo "❌ Pipeline failed!"
+            script {
+                try {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ Build failed! Build #${env.BUILD_NUMBER} - ${env.BUILD_URL}"
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Slack notification failed: ${e.getMessage()}"
+                }
             }
+        }
+        unstable {
+            echo "⚠️ Pipeline unstable - some tests may have failed"
+        }
+        aborted {
+            echo "⚠️ Pipeline aborted by user"
         }
     }
 }
+
+    
