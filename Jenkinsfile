@@ -14,8 +14,16 @@ pipeline {
             steps {
                 script {
                     echo "🔄 Checking out code and verifying Docker..."
-                    sh 'git --version'
-                    sh 'docker --version'
+                    
+                    // Check if running on Windows or Linux
+                    if (isUnix()) {
+                        sh 'git --version'
+                        sh 'docker --version'
+                    } else {
+                        bat 'git --version'
+                        bat 'docker --version'
+                    }
+                    
                     echo "✅ Basic environment ready"
                 }
             }
@@ -222,11 +230,20 @@ pipeline {
                     steps {
                         script {
                             echo "🐳 Building Docker image for client..."
-                            sh """
-                                docker build -t ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} -f docker/Dockerfile.client .
-                                docker tag ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-client:latest
-                                echo "✅ Client Docker image built: ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER}"
-                            """
+                            
+                            if (isUnix()) {
+                                sh """
+                                    docker build -t ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} -f docker/Dockerfile.client .
+                                    docker tag ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-client:latest
+                                    echo "✅ Client Docker image built: ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER}"
+                                """
+                            } else {
+                                bat """
+                                    docker build -t ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} -f docker/Dockerfile.client .
+                                    docker tag ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-client:latest
+                                    echo "✅ Client Docker image built: ${DOCKER_REGISTRY}-client:${env.BUILD_NUMBER}"
+                                """
+                            }
                         }
                     }
                 }
@@ -235,11 +252,20 @@ pipeline {
                     steps {
                         script {
                             echo "🐳 Building Docker image for server..."
-                            sh """
-                                docker build -t ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} -f docker/Dockerfile.server .
-                                docker tag ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-server:latest
-                                echo "✅ Server Docker image built: ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER}"
-                            """
+                            
+                            if (isUnix()) {
+                                sh """
+                                    docker build -t ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} -f docker/Dockerfile.server .
+                                    docker tag ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-server:latest
+                                    echo "✅ Server Docker image built: ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER}"
+                                """
+                            } else {
+                                bat """
+                                    docker build -t ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} -f docker/Dockerfile.server .
+                                    docker tag ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER} ${DOCKER_REGISTRY}-server:latest
+                                    echo "✅ Server Docker image built: ${DOCKER_REGISTRY}-server:${env.BUILD_NUMBER}"
+                                """
+                            }
                         }
                     }
                 }
@@ -257,13 +283,25 @@ pipeline {
             steps {
                 script {
                     echo "🔗 Running integration tests..."
-                    sh 'docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit'
+                    
+                    if (isUnix()) {
+                        sh 'docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit'
+                    } else {
+                        bat 'docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit'
+                    }
                 }
             }
             post {
                 always {
-                    sh 'docker-compose -f docker-compose.test.yml down'
+                    script {
+                        if (isUnix()) {
+                            sh 'docker-compose -f docker-compose.test.yml down'
+                        } else {
+                            bat 'docker-compose -f docker-compose.test.yml down'
+                        }
+                    }
                 }
+            }
             }
         }
         
@@ -275,13 +313,24 @@ pipeline {
             steps {
                 script {
                     echo "🚀 Deploying to staging environment..."
-                    sh """
-                        export BUILD_NUMBER=${env.BUILD_NUMBER}
-                        export GIT_COMMIT=${env.GIT_COMMIT}
-                        docker-compose -f docker-compose.staging.yml down || true
-                        docker-compose -f docker-compose.staging.yml up -d
-                        echo "✅ Staging deployment completed"
-                    """
+                    
+                    if (isUnix()) {
+                        sh """
+                            export BUILD_NUMBER=${env.BUILD_NUMBER}
+                            export GIT_COMMIT=${env.GIT_COMMIT}
+                            docker-compose -f docker-compose.staging.yml down || true
+                            docker-compose -f docker-compose.staging.yml up -d
+                            echo "✅ Staging deployment completed"
+                        """
+                    } else {
+                        bat """
+                            set BUILD_NUMBER=${env.BUILD_NUMBER}
+                            set GIT_COMMIT=${env.GIT_COMMIT}
+                            docker-compose -f docker-compose.staging.yml down
+                            docker-compose -f docker-compose.staging.yml up -d
+                            echo "✅ Staging deployment completed"
+                        """
+                    }
                 }
             }
         }
@@ -299,14 +348,26 @@ pipeline {
                               submitterParameter: 'DEPLOYER'
                     }
                     echo "Deployment approved by: ${env.DEPLOYER}"
-                    sh """
-                        export BUILD_NUMBER=${env.BUILD_NUMBER}
-                        export GIT_COMMIT=${env.GIT_COMMIT}
-                        docker-compose -f docker-compose.prod.yml up -d --no-deps server
-                        sleep 10
-                        docker-compose -f docker-compose.prod.yml up -d --no-deps client
-                        echo "✅ Production deployment completed"
-                    """
+                    
+                    if (isUnix()) {
+                        sh """
+                            export BUILD_NUMBER=${env.BUILD_NUMBER}
+                            export GIT_COMMIT=${env.GIT_COMMIT}
+                            docker-compose -f docker-compose.prod.yml up -d --no-deps server
+                            sleep 10
+                            docker-compose -f docker-compose.prod.yml up -d --no-deps client
+                            echo "✅ Production deployment completed"
+                        """
+                    } else {
+                        bat """
+                            set BUILD_NUMBER=${env.BUILD_NUMBER}
+                            set GIT_COMMIT=${env.GIT_COMMIT}
+                            docker-compose -f docker-compose.prod.yml up -d --no-deps server
+                            timeout /t 10
+                            docker-compose -f docker-compose.prod.yml up -d --no-deps client
+                            echo "✅ Production deployment completed"
+                        """
+                    }
                 }
             }
         }
@@ -334,22 +395,42 @@ pipeline {
                         healthUrl = "http://localhost:5000/api/health"
                     }
                     
-                    sh """
-                        echo "Checking health at: ${healthUrl}"
-                        for i in {1..5}; do
-                            if curl -f ${healthUrl}; then
-                                echo "✅ Health check passed on attempt \$i"
-                                break
-                            else
-                                echo "⏳ Health check failed, attempt \$i/5, waiting..."
-                                sleep 10
-                                if [ \$i -eq 5 ]; then
-                                    echo "❌ Health check failed after 5 attempts"
-                                    exit 1
+                    if (isUnix()) {
+                        sh """
+                            echo "Checking health at: ${healthUrl}"
+                            for i in {1..5}; do
+                                if curl -f ${healthUrl}; then
+                                    echo "✅ Health check passed on attempt \$i"
+                                    break
+                                else
+                                    echo "⏳ Health check failed, attempt \$i/5, waiting..."
+                                    sleep 10
+                                    if [ \$i -eq 5 ]; then
+                                        echo "❌ Health check failed after 5 attempts"
+                                        exit 1
+                                    fi
                                 fi
-                            fi
-                        done
-                    """
+                            done
+                        """
+                    } else {
+                        bat """
+                            echo "Checking health at: ${healthUrl}"
+                            for /L %%i in (1,1,5) do (
+                                curl -f ${healthUrl} && (
+                                    echo "✅ Health check passed on attempt %%i"
+                                    goto :end
+                                ) || (
+                                    echo "⏳ Health check failed, attempt %%i/5, waiting..."
+                                    timeout /t 10 >nul
+                                    if %%i==5 (
+                                        echo "❌ Health check failed after 5 attempts"
+                                        exit /b 1
+                                    )
+                                )
+                            )
+                            :end
+                        """
+                    }
                 }
             }
         }
